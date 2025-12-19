@@ -1,0 +1,70 @@
+name: CTF Flag Bot
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract Issue Data
+        id: extract
+        run: |
+          BODY="${{ github.event.issue.body }}"
+          USER=$(echo "$BODY" | grep "name:" | cut -d':' -f2 | tr -d ' ')
+          FLAG=$(echo "$BODY" | grep "flag:" | cut -d':' -f2 | tr -d ' ')
+          echo "user=$USER" >> $GITHUB_OUTPUT
+          echo "flag=$FLAG" >> $GITHUB_OUTPUT
+
+      - name: Validate Flag
+        id: validate
+        run: |
+          FLAG="${{ steps.extract.outputs.flag }}"
+          case "$FLAG" in
+            hari) POINTS=10 ;;
+            kris) POINTS=10 ;;
+            mozhi) POINTS=20 ;;
+            varman) POINTS=20 ;;
+            *) echo "valid=false" >> $GITHUB_OUTPUT; exit 0 ;;
+          esac
+          echo "valid=true" >> $GITHUB_OUTPUT
+          echo "points=$POINTS" >> $GITHUB_OUTPUT
+
+      - name: Check Duplicate
+        id: dup
+        run: |
+          USER="${{ steps.extract.outputs.user }}"
+          FLAG="${{ steps.extract.outputs.flag }}"
+          if grep -q "$USER.*$FLAG" leaderboard.md; then
+            echo "dup=true" >> $GITHUB_OUTPUT
+          else
+            echo "dup=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update Leaderboard
+        if: steps.validate.outputs.valid == 'true' && steps.dup.outputs.dup == 'false'
+        run: |
+          USER="${{ steps.extract.outputs.user }}"
+          FLAG="${{ steps.extract.outputs.flag }}"
+          POINTS="${{ steps.validate.outputs.points }}"
+
+          if grep -q "| $USER |" leaderboard.md; then
+            OLD=$(grep "| $USER |" leaderboard.md | awk '{print $3}')
+            FLAGS=$(grep "| $USER |" leaderboard.md | cut -d'|' -f4)
+            sed -i "s|$USER | $OLD | $FLAGS|$USER | $((OLD+POINTS)) | $FLAGS,$FLAG|" leaderboard.md
+          else
+            echo "| $USER | $POINTS | $FLAG |" >> leaderboard.md
+          fi
+
+      - name: Commit
+        if: steps.validate.outputs.valid == 'true' && steps.dup.outputs.dup == 'false'
+        run: |
+          git config user.name "ctf-bot"
+          git config user.email "bot@github.com"
+          git add leaderboard.md
+          git commit -m "CTF update for ${{ steps.extract.outputs.user }}"
+          git push
