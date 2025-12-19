@@ -13,23 +13,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # -----------------------------
+      # Checkout repository
+      # -----------------------------
       - uses: actions/checkout@v4
 
       # -----------------------------
-      # Extract user & flag
+      # Extract user and flag
       # -----------------------------
       - name: Extract Issue Data
         id: extract
         run: |
           BODY="${{ github.event.issue.body }}"
-          USER=$(echo "$BODY" | grep "name:" | cut -d':' -f2 | tr -d ' ')
-          FLAG=$(echo "$BODY" | grep "flag:" | cut -d':' -f2 | tr -d ' ')
+
+          USER=$(echo "$BODY" | grep "^name:" | cut -d':' -f2 | tr -d ' ')
+          FLAG=$(echo "$BODY" | grep "^flag:" | cut -d':' -f2 | tr -d ' ')
 
           echo "user=$USER" >> $GITHUB_OUTPUT
           echo "flag=$FLAG" >> $GITHUB_OUTPUT
 
       # -----------------------------
-      # Validate flag
+      # Validate flag and assign points
       # -----------------------------
       - name: Validate Flag
         id: validate
@@ -51,7 +55,7 @@ jobs:
           echo "points=$POINTS" >> $GITHUB_OUTPUT
 
       # -----------------------------
-      # Check duplicate
+      # Check duplicate flag
       # -----------------------------
       - name: Check Duplicate
         id: dup
@@ -66,7 +70,7 @@ jobs:
           fi
 
       # -----------------------------
-      # Update leaderboard
+      # Update leaderboard safely
       # -----------------------------
       - name: Update Leaderboard
         if: steps.validate.outputs.valid == 'true' && steps.dup.outputs.dup == 'false'
@@ -76,13 +80,26 @@ jobs:
           POINTS="${{ steps.validate.outputs.points }}"
 
           if grep -q "| $USER |" leaderboard.md; then
-            OLD=$(grep "| $USER |" leaderboard.md | awk '{print $3}')
-            FLAGS=$(grep "| $USER |" leaderboard.md | cut -d'|' -f4)
-            sed -i "s|$USER | $OLD | $FLAGS|$USER | $((OLD+POINTS)) | $FLAGS,$FLAG|" leaderboard.md
+            LINE=$(grep "| $USER |" leaderboard.md)
+
+            OLD_POINTS=$(echo "$LINE" | cut -d'|' -f3 | tr -d ' ')
+            OLD_FLAGS=$(echo "$LINE" | cut -d'|' -f4 | tr -d ' ')
+
+            if [ -z "$OLD_POINTS" ]; then
+              OLD_POINTS=0
+            fi
+
+            NEW_POINTS=$((OLD_POINTS + POINTS))
+
+            sed -i "\|$LINE|d" leaderboard.md
+            echo "| $USER | $NEW_POINTS | $OLD_FLAGS,$FLAG |" >> leaderboard.md
           else
             echo "| $USER | $POINTS | $FLAG |" >> leaderboard.md
           fi
 
+      # -----------------------------
+      # Commit leaderboard
+      # -----------------------------
       - name: Commit Leaderboard
         if: steps.validate.outputs.valid == 'true' && steps.dup.outputs.dup == 'false'
         run: |
@@ -93,7 +110,7 @@ jobs:
           git push
 
       # -----------------------------
-      # Comment on issue
+      # Comment result on issue
       # -----------------------------
       - name: Comment Result
         run: |
@@ -112,7 +129,7 @@ jobs:
             -d "{\"body\":\"$COMMENT\"}"
 
       # -----------------------------
-      # Close issue
+      # Close the issue
       # -----------------------------
       - name: Close Issue
         run: |
