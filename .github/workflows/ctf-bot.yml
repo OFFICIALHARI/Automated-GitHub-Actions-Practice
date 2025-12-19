@@ -1,4 +1,4 @@
-name: CTF Flag Bot (Secure)
+name: CTF Flag Bot
 
 permissions:
   contents: write
@@ -13,14 +13,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ----------------------------------
+      # -----------------------------
       # Checkout repository
-      # ----------------------------------
+      # -----------------------------
       - uses: actions/checkout@v4
 
-      # ----------------------------------
-      # Extract name and flag from issue
-      # ----------------------------------
+      # -----------------------------
+      # Extract user and flag
+      # -----------------------------
       - name: Extract Issue Data
         id: extract
         run: |
@@ -32,42 +32,31 @@ jobs:
           echo "user=$USER" >> $GITHUB_OUTPUT
           echo "flag=$FLAG" >> $GITHUB_OUTPUT
 
-      # ----------------------------------
-      # Validate flag using HASHING
-      # ----------------------------------
-      - name: Validate Flag (Hashed)
+      # -----------------------------
+      # Validate flag and assign points
+      # -----------------------------
+      - name: Validate Flag
         id: validate
         run: |
           FLAG="${{ steps.extract.outputs.flag }}"
 
-          # Hash submitted flag
-          FLAG_HASH=$(echo -n "$FLAG" | sha256sum | awk '{print $1}')
-
-          # 🔐 STORED HASHES (replace with your real hashes)
-          HARI_HASH="REPLACE_WITH_HASH_OF_hari"
-          KRIS_HASH="REPLACE_WITH_HASH_OF_kris"
-          MOZHI_HASH="REPLACE_WITH_HASH_OF_mozhi"
-          VARMAN_HASH="REPLACE_WITH_HASH_OF_varman"
-
-          if [ "$FLAG_HASH" = "$HARI_HASH" ]; then
-            POINTS=10
-          elif [ "$FLAG_HASH" = "$KRIS_HASH" ]; then
-            POINTS=10
-          elif [ "$FLAG_HASH" = "$MOZHI_HASH" ]; then
-            POINTS=20
-          elif [ "$FLAG_HASH" = "$VARMAN_HASH" ]; then
-            POINTS=20
-          else
-            echo "valid=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
+          case "$FLAG" in
+            hari) POINTS=10 ;;
+            kris) POINTS=10 ;;
+            mozhi) POINTS=20 ;;
+            varman) POINTS=20 ;;
+            *)
+              echo "valid=false" >> $GITHUB_OUTPUT
+              exit 0
+              ;;
+          esac
 
           echo "valid=true" >> $GITHUB_OUTPUT
           echo "points=$POINTS" >> $GITHUB_OUTPUT
 
-      # ----------------------------------
-      # Check duplicate submission
-      # ----------------------------------
+      # -----------------------------
+      # Check duplicate flag
+      # -----------------------------
       - name: Check Duplicate
         id: dup
         run: |
@@ -80,9 +69,9 @@ jobs:
             echo "dup=false" >> $GITHUB_OUTPUT
           fi
 
-      # ----------------------------------
-      # Update leaderboard
-      # ----------------------------------
+      # -----------------------------
+      # Update leaderboard safely
+      # -----------------------------
       - name: Update Leaderboard
         if: steps.validate.outputs.valid == 'true' && steps.dup.outputs.dup == 'false'
         run: |
@@ -108,21 +97,21 @@ jobs:
             echo "| $USER | $POINTS | $FLAG |" >> leaderboard.md
           fi
 
-      # ----------------------------------
-      # Commit leaderboard changes
-      # ----------------------------------
+      # -----------------------------
+      # Commit leaderboard
+      # -----------------------------
       - name: Commit Leaderboard
         if: steps.validate.outputs.valid == 'true' && steps.dup.outputs.dup == 'false'
         run: |
           git config user.name "ctf-bot"
           git config user.email "ctf-bot@github.com"
           git add leaderboard.md
-          git commit -m "CTF: ${{ steps.extract.outputs.user }} solved a challenge"
+          git commit -m "CTF: ${{ steps.extract.outputs.user }} solved ${{ steps.extract.outputs.flag }}"
           git push
 
-      # ----------------------------------
+      # -----------------------------
       # Comment result on issue
-      # ----------------------------------
+      # -----------------------------
       - name: Comment Result
         run: |
           if [[ "${{ steps.validate.outputs.valid }}" != "true" ]]; then
@@ -139,9 +128,9 @@ jobs:
             https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments \
             -d "{\"body\":\"$COMMENT\"}"
 
-      # ----------------------------------
+      # -----------------------------
       # Close the issue
-      # ----------------------------------
+      # -----------------------------
       - name: Close Issue
         run: |
           curl -X PATCH \
