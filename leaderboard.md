@@ -24,3 +24,4 @@
     else
       echo "| $USER | $POINTS | $FLAG |" >> leaderboard.md
     fi
+| officialhari | 20 | varman |
